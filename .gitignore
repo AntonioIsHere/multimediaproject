@@ -1,0 +1,17 @@
+# Ignore OS and editor files
+.DS_Store
+Thumbs.db
+
+# Node and env (if added later)
+node_modules/
+.env
+
+# IDE files
+.vscode/
+
+# Build outputs
+dist/
+build/
+
+# OneDrive/Windows temp files
+~$*

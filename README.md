@@ -1,0 +1,1 @@
+An application that displays local events, workshops, and festivals based on a user's location, allowing them to explore and join activities.

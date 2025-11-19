@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Local Events Explorer</title>
+		<link rel="stylesheet" href="style.css">
+	</head>
+	<body>
+		<header>
+			<div class="header-inner">
+				<h1>Local Events Explorer</h1>
+				<p class="tag">Find workshops, festivals and meetups near you</p>
+			</div>
+		</header>
+
+		<main>
+			<section class="controls">
+				<div class="control-row">
+					<button id="locateBtn" class="btn">Use my location</button>
+					<button id="mockLocBtn" class="btn ghost">Use sample location</button>
+				</div>
+				<div class="control-row">
+					<label for="radius">Radius (km)</label>
+					<input id="radius" type="number" value="50" min="1" max="200">
+				</div>
+				<div class="control-row small-note">Tip: Allow browser location access or click "Use sample location".</div>
+			</section>
+
+			<section class="content">
+				<aside id="eventsList" class="events-list">
+					<!-- event cards go here -->
+				</aside>
+
+				<section class="canvas-wrap">
+					<canvas id="eventsCanvas"></canvas>
+					<div id="tooltip" class="tooltip" aria-hidden="true"></div>
+				</section>
+			</section>
+		</main>
+
+		<script src="script.js"></script>
+	</body>
+</html>

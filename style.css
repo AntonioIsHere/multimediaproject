@@ -1,0 +1,42 @@
+/* Basic reset */
+* { box-sizing: border-box; }
+html,body{height:100%;margin:0;font-family:Segoe UI, Roboto, Arial, sans-serif;background:#f7f8fb;color:#222}
+
+header{background:linear-gradient(90deg,#4b79a1,#283e51);color:#fff;padding:20px}
+.header-inner{max-width:1100px;margin:0 auto}
+header h1{margin:0;font-size:1.5rem}
+.tag{opacity:0.9;margin-top:6px;font-size:0.95rem}
+
+main{max-width:1100px;margin:20px auto;padding:0 16px}
+.controls{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:12px}
+.control-row{display:flex;gap:8px;align-items:center}
+.control-row.small-note{font-size:0.85rem;color:#444}
+
+.btn{background:#2b7a78;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
+.btn.ghost{background:transparent;border:1px solid rgba(43,122,120,0.2);color:#2b7a78}
+input[type=number]{width:80px;padding:6px;border-radius:6px;border:1px solid #ddd}
+
+.content{display:flex;gap:16px}
+.events-list{width:360px;max-height:70vh;overflow:auto;padding:8px;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(18,30,49,0.06)}
+.canvas-wrap{flex:1;min-height:420px;background:linear-gradient(180deg,#fbfcfe,#f1f7ff);display:flex;align-items:center;justify-content:center;border-radius:8px;padding:12px}
+
+.event-card{display:flex;gap:10px;padding:10px;border-bottom:1px solid #f0f0f0}
+.event-card:last-child{border-bottom:none}
+.event-thumb{width:84px;height:64px;border-radius:6px;background:#e6eef6;flex-shrink:0}
+.event-body{flex:1}
+.event-title{font-weight:600;margin:0 0 6px}
+.event-meta{font-size:0.9rem;color:#666}
+.event-actions{margin-top:8px}
+.join-btn{background:#4b79a1;color:#fff;padding:6px 10px;border-radius:6px;border:none;cursor:pointer}
+
+.tooltip{position:absolute;background:rgba(0,0,0,0.85);color:#fff;padding:6px 8px;border-radius:6px;font-size:0.85rem;pointer-events:none;transform:translate(-50%,-120%);white-space:nowrap}
+
+/* canvas container positions */
+.canvas-wrap{position:relative}
+canvas{width:100%;height:100%;display:block;border-radius:6px}
+
+@media (max-width:900px){
+	.content{flex-direction:column}
+	.events-list{width:100%;max-height:30vh}
+}
+
