@@ -1,8 +1,8 @@
 // Sample events dataset (latitude, longitude near Bucharest as sample)
 const events = [
-	{ id: 1, title: 'Handmade Crafts Fair', lat: 44.439663, lon: 26.096306, date: '2025-11-28', place: 'Old Town', type: 'fair' },
+	{ id: 1, title: 'Handmade Crafts Fair', lat: 44.439663, lon: 26.096306, date: '2025-11-28', place: 'Old Town', type: 'fair', audioUrl: 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3' },
 	{ id: 2, title: 'Weekend Yoga Workshop', lat: 44.435, lon: 26.1, date: '2025-11-25', place: 'Park Herastrau', type: 'workshop' },
-	{ id: 3, title: 'Indie Music Festival', lat: 44.42, lon: 26.08, date: '2025-12-05', place: 'Open Air Stage', type: 'festival' },
+	{ id: 3, title: 'Indie Music Festival', lat: 44.42, lon: 26.08, date: '2025-12-05', place: 'Open Air Stage', type: 'festival', audioUrl: '' },
 	{ id: 4, title: 'Photography Walk', lat: 44.445, lon: 26.09, date: '2025-11-30', place: 'Museum Quarter', type: 'meetup' },
 	{ id: 5, title: 'Local Food Tasting', lat: 44.43, lon: 26.11, date: '2025-12-01', place: 'City Market', type: 'festival' }
 ];
@@ -51,7 +51,10 @@ function renderEventsList(items){
 		body.className = 'event-body';
 		body.innerHTML = `<h3 class="event-title">${e.title}</h3>
 											<div class="event-meta">${e.place} • ${e.date} • ${e.distanceKm.toFixed(1)} km</div>
-											<div class="event-actions"><button class="join-btn">Join</button></div>`;
+											<div class="event-actions">
+												<button class="join-btn">Join</button>
+												<button class="audio-btn" data-id="${e.id}">Preview</button>
+											</div>`;
 
 		card.appendChild(thumb);
 		card.appendChild(body);
@@ -65,9 +68,148 @@ function renderEventsList(items){
 		card.addEventListener('mouseenter', () => highlightOnCanvas(e.id));
 		card.addEventListener('mouseleave', () => highlightOnCanvas(null));
 
+		// audio preview
+		const audioBtn = card.querySelector('.audio-btn');
+		if(audioBtn){
+			audioBtn.addEventListener('click', async () => {
+				const id = parseInt(audioBtn.dataset.id,10);
+				const ev = items.find(it => it.id === id);
+				if(!ev) return;
+				await playEventAudio(ev, audioBtn);
+			});
+		}
+
 		eventsList.appendChild(card);
 	});
 }
+
+// --- Audio API setup ---
+let audioCtx = null;
+let masterGain = null;
+let analyser = null;
+let currentSource = null;
+let currentEventId = null;
+const audioCache = new Map();
+
+const globalPlay = document.getElementById('globalPlay');
+const volumeControl = document.getElementById('volume');
+const vizCanvas = document.getElementById('viz');
+const vizCtx = vizCanvas.getContext('2d');
+
+function ensureAudioContext(){
+	if(audioCtx) return;
+	audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+	masterGain = audioCtx.createGain();
+	masterGain.gain.value = parseFloat(volumeControl.value || 0.9);
+	analyser = audioCtx.createAnalyser();
+	analyser.fftSize = 256;
+	masterGain.connect(audioCtx.destination);
+	analyser.connect(masterGain);
+	requestAnimationFrame(drawViz);
+}
+
+function stopCurrentAudio(){
+	if(currentSource){
+		try{ currentSource.stop(); }catch(e){}
+		currentSource.disconnect();
+		currentSource = null;
+	}
+	// stop speech synthesis too
+	if(window.speechSynthesis){ window.speechSynthesis.cancel(); }
+	currentEventId = null;
+	// update UI
+	document.querySelectorAll('.audio-btn.playing').forEach(b=>{ b.classList.remove('playing'); b.textContent = 'Preview'; });
+}
+
+async function loadAudioBuffer(url){
+	if(!url) return null;
+	if(audioCache.has(url)) return audioCache.get(url);
+	try{
+		const resp = await fetch(url);
+		const ab = await resp.arrayBuffer();
+		ensureAudioContext();
+		const buf = await audioCtx.decodeAudioData(ab);
+		audioCache.set(url, buf);
+		return buf;
+	} catch(err){
+		console.warn('Could not load audio', err);
+		return null;
+	}
+}
+
+async function playEventAudio(ev, buttonEl){
+	// stop previous
+	if(currentEventId === ev.id){ stopCurrentAudio(); return; }
+	stopCurrentAudio();
+	// ensure context on user gesture
+	ensureAudioContext();
+	if(ev.audioUrl){
+		const buf = await loadAudioBuffer(ev.audioUrl);
+		if(buf){
+			const src = audioCtx.createBufferSource();
+			src.buffer = buf;
+			src.connect(analyser);
+			src.start();
+			currentSource = src;
+			currentEventId = ev.id;
+			// ui
+			document.querySelectorAll('.audio-btn.playing').forEach(b=>{ b.classList.remove('playing'); b.textContent = 'Preview'; });
+			buttonEl.classList.add('playing'); buttonEl.textContent='Stop';
+			src.onended = () => { stopCurrentAudio(); };
+		} else {
+			// fallback to speech
+			speakEvent(ev, buttonEl);
+		}
+	} else {
+		// no file — use SpeechSynthesis as fallback (read title and place)
+		speakEvent(ev, buttonEl);
+	}
+}
+
+function speakEvent(ev, buttonEl){
+	if(!('speechSynthesis' in window)){ alert('No audio available and SpeechSynthesis is unsupported in your browser.'); return; }
+	const msg = new SpeechSynthesisUtterance(`${ev.title}, at ${ev.place} on ${ev.date}.`);
+	msg.onend = () => { stopCurrentAudio(); };
+	currentEventId = ev.id;
+	document.querySelectorAll('.audio-btn.playing').forEach(b=>{ b.classList.remove('playing'); b.textContent = 'Preview'; });
+	buttonEl.classList.add('playing'); buttonEl.textContent='Stop';
+	window.speechSynthesis.speak(msg);
+}
+
+// viz
+function drawViz(){
+	requestAnimationFrame(drawViz);
+	if(!analyser) return;
+	const w = vizCanvas.width = vizCanvas.clientWidth * (window.devicePixelRatio || 1);
+	const h = vizCanvas.height = vizCanvas.clientHeight * (window.devicePixelRatio || 1);
+	const data = new Uint8Array(analyser.frequencyBinCount);
+	analyser.getByteTimeDomainData(data);
+	vizCtx.clearRect(0,0,w,h);
+	vizCtx.lineWidth = 2 * (window.devicePixelRatio || 1);
+	vizCtx.strokeStyle = '#2b7a78';
+	vizCtx.beginPath();
+	const sliceWidth = w / data.length;
+	let x = 0;
+	for(let i=0;i<data.length;i++){
+		const v = data[i]/128.0;
+		const y = v*h/2;
+		if(i===0) vizCtx.moveTo(x,y); else vizCtx.lineTo(x,y);
+		x += sliceWidth;
+	}
+	vizCtx.stroke();
+}
+
+volumeControl.addEventListener('input', ()=>{
+	if(masterGain) masterGain.gain.value = parseFloat(volumeControl.value);
+});
+
+globalPlay.addEventListener('click', ()=>{
+	// if there is a highlighted event, play it; otherwise play first filtered
+	const toPlay = filtered[0] || null;
+	if(!toPlay) return alert('No event selected to play.');
+	const btn = eventsList.querySelector(`.audio-btn[data-id='${toPlay.id}']`);
+	btn && btn.click();
+});
 
 // Canvas rendering
 const ctx = canvas.getContext('2d');
