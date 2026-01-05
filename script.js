@@ -1,16 +1,19 @@
 // Sample events dataset (latitude, longitude near Bucharest as sample)
 const events = [
-	{ id: 1, title: 'Handmade Crafts Fair', lat: 44.439663, lon: 26.096306, date: '2025-11-28', place: 'Old Town', type: 'fair', audioUrl: 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3' },
-	{ id: 2, title: 'Weekend Yoga Workshop', lat: 44.435, lon: 26.1, date: '2025-11-25', place: 'Park Herastrau', type: 'workshop' },
-	{ id: 3, title: 'Indie Music Festival', lat: 44.42, lon: 26.08, date: '2025-12-05', place: 'Open Air Stage', type: 'festival', audioUrl: '' },
-	{ id: 4, title: 'Photography Walk', lat: 44.445, lon: 26.09, date: '2025-11-30', place: 'Museum Quarter', type: 'meetup' },
-	{ id: 5, title: 'Local Food Tasting', lat: 44.43, lon: 26.11, date: '2025-12-01', place: 'City Market', type: 'festival' }
+	// moved slightly to spread points visually across S/E directions
+	{ id: 1, title: 'Handmade Crafts Fair', lat: 44.4375, lon: 26.1080, date: '2025-11-28', place: 'Old Town', type: 'fair', audioUrl: 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3' },
+	{ id: 2, title: 'Weekend Yoga Workshop', lat: 44.4230, lon: 26.1055, date: '2025-11-25', place: 'Park Herastrau', type: 'workshop' },
+	{ id: 3, title: 'Indie Music Festival', lat: 44.4180, lon: 26.1230, date: '2025-12-05', place: 'Open Air Stage', type: 'festival', audioUrl: '' },
+	{ id: 4, title: 'Photography Walk', lat: 44.4440, lon: 26.1150, date: '2025-11-30', place: 'Museum Quarter', type: 'meetup' },
+	{ id: 5, title: 'Local Food Tasting', lat: 44.4270, lon: 26.1350, date: '2025-12-01', place: 'City Market', type: 'festival' }
 ];
 
 // DOM refs
 const locateBtn = document.getElementById('locateBtn');
 const mockLocBtn = document.getElementById('mockLocBtn');
 const radiusInput = document.getElementById('radius');
+const radiusSlider = document.getElementById('radiusSlider');
+const radiusValue = document.getElementById('radiusValue');
 const eventsList = document.getElementById('eventsList');
 const canvas = document.getElementById('eventsCanvas');
 const tooltip = document.getElementById('tooltip');
@@ -59,14 +62,24 @@ function renderEventsList(items){
 		card.appendChild(thumb);
 		card.appendChild(body);
 
-		card.querySelector('.join-btn').addEventListener('click', () => {
-			card.querySelector('.join-btn').textContent = 'Joined';
-			card.querySelector('.join-btn').disabled = true;
-			card.style.background = '#f4fffc';
+		// initialize join button based on persistent state on the original event object
+		const joinBtn = card.querySelector('.join-btn');
+		const origEvent = events.find(ev => ev.id === e.id);
+		const isJoined = origEvent && origEvent.joined;
+		joinBtn.textContent = isJoined ? 'Joined' : 'Join';
+		joinBtn.classList.toggle('joined', !!isJoined);
+		card.style.background = isJoined ? '#f4fffc' : '';
+
+		joinBtn.addEventListener('click', () => {
+			if(!origEvent) return;
+			origEvent.joined = !origEvent.joined; // toggle persistent state
+			joinBtn.textContent = origEvent.joined ? 'Joined' : 'Join';
+			joinBtn.classList.toggle('joined', origEvent.joined);
+			card.style.background = origEvent.joined ? '#f4fffc' : '';
 		});
 
-		card.addEventListener('mouseenter', () => highlightOnCanvas(e.id));
-		card.addEventListener('mouseleave', () => highlightOnCanvas(null));
+		card.addEventListener('mouseenter', () => { highlightOnCanvas(e.id); if(typeof highlightOnMap === 'function') highlightOnMap(e.id); });
+		card.addEventListener('mouseleave', () => { highlightOnCanvas(null); if(typeof highlightOnMap === 'function') highlightOnMap(null); });
 
 		// audio preview
 		const audioBtn = card.querySelector('.audio-btn');
@@ -94,19 +107,20 @@ const audioCache = new Map();
 const globalPlay = document.getElementById('globalPlay');
 const volumeControl = document.getElementById('volume');
 const vizCanvas = document.getElementById('viz');
-const vizCtx = vizCanvas.getContext('2d');
+const vizCtx = vizCanvas ? vizCanvas.getContext('2d') : null;
 
 function ensureAudioContext(){
 	if(audioCtx) return;
 	audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 	masterGain = audioCtx.createGain();
-	masterGain.gain.value = parseFloat(volumeControl.value || 0.9);
+	// use volume control if present, otherwise default to 0.9
+	masterGain.gain.value = parseFloat((volumeControl && volumeControl.value) || 0.9);
 	analyser = audioCtx.createAnalyser();
 	analyser.fftSize = 256;
 	masterGain.connect(audioCtx.destination);
 	analyser.connect(masterGain);
-	requestAnimationFrame(drawViz);
-}
+	if(vizCtx) requestAnimationFrame(drawViz);
+} 
 
 function stopCurrentAudio(){
 	if(currentSource){
@@ -178,6 +192,7 @@ function speakEvent(ev, buttonEl){
 
 // viz
 function drawViz(){
+	if(!vizCtx || !vizCanvas) return;
 	requestAnimationFrame(drawViz);
 	if(!analyser) return;
 	const w = vizCanvas.width = vizCanvas.clientWidth * (window.devicePixelRatio || 1);
@@ -186,7 +201,7 @@ function drawViz(){
 	analyser.getByteTimeDomainData(data);
 	vizCtx.clearRect(0,0,w,h);
 	vizCtx.lineWidth = 2 * (window.devicePixelRatio || 1);
-	vizCtx.strokeStyle = '#2b7a78';
+	vizCtx.strokeStyle = '#1F7A8C';
 	vizCtx.beginPath();
 	const sliceWidth = w / data.length;
 	let x = 0;
@@ -197,19 +212,23 @@ function drawViz(){
 		x += sliceWidth;
 	}
 	vizCtx.stroke();
+} 
+
+if(volumeControl){
+	volumeControl.addEventListener('input', ()=>{
+		if(masterGain) masterGain.gain.value = parseFloat(volumeControl.value);
+	});
 }
 
-volumeControl.addEventListener('input', ()=>{
-	if(masterGain) masterGain.gain.value = parseFloat(volumeControl.value);
-});
-
-globalPlay.addEventListener('click', ()=>{
-	// if there is a highlighted event, play it; otherwise play first filtered
-	const toPlay = filtered[0] || null;
-	if(!toPlay) return alert('No event selected to play.');
-	const btn = eventsList.querySelector(`.audio-btn[data-id='${toPlay.id}']`);
-	btn && btn.click();
-});
+if(globalPlay){
+	globalPlay.addEventListener('click', ()=>{
+		// if there is a highlighted event, play it; otherwise play first filtered
+		const toPlay = filtered[0] || null;
+		if(!toPlay) return alert('No event selected to play.');
+		const btn = eventsList.querySelector(`.audio-btn[data-id='${toPlay.id}']`);
+		btn && btn.click();
+	});
+}
 
 // Canvas rendering
 const ctx = canvas.getContext('2d');
@@ -230,6 +249,11 @@ function resizeCanvas(){
 
 function computePoints(){
 	if(!userLoc) return;
+	// ensure we have valid canvas dimensions (can be zero during layout changes)
+	if(canvasState.width <= 0 || canvasState.height <= 0){
+		resizeCanvas();
+		if(canvasState.width <= 0 || canvasState.height <= 0) return; // give up until next resize
+	}
 	const centerLat = userLoc.lat; const centerLon = userLoc.lon;
 	const meanLat = centerLat * Math.PI/180;
 	const kmPerDegLat = 111.32; // approx
@@ -245,9 +269,27 @@ function computePoints(){
 	canvasState.points = filtered.map(e => {
 		const dxKm = (e.lon - centerLon) * kmPerDegLon;
 		const dyKm = (e.lat - centerLat) * kmPerDegLat; // north positive
-		const x = canvasState.width/2 + dxKm * canvasState.scale;
-		const y = canvasState.height/2 - dyKm * canvasState.scale;
-		return { id: e.id, x, y, r: 8 + Math.max(0, 10 - e.distanceKm/5), title: e.title, distance: e.distanceKm };
+		let x = canvasState.width/2 + dxKm * canvasState.scale;
+		let y = canvasState.height/2 - dyKm * canvasState.scale;
+
+		// Visual dispersion: apply a small, deterministic pixel offset to
+		// reduce overlap for very close events without changing distance data.
+		// Dispersion is larger for near events and decays with distance.
+		const dist = e.distanceKm;
+		const maxDispersion = 18; // px max visual spread
+		const dispersionPx = Math.min(maxDispersion, maxDispersion * Math.exp(-dist/6));
+		const angle = ((e.id * 137.508) % 360) * Math.PI / 180; // deterministic angle per id
+		x += Math.cos(angle) * dispersionPx;
+		y += Math.sin(angle) * dispersionPx;
+
+		// compute visual radius and clamp point within canvas bounds so
+		// it doesn't get placed outside (which caused overlapping UI)
+		const r = 8 + Math.max(0, 10 - e.distanceKm/5);
+		const pad = 6;
+		x = Math.max(r + pad, Math.min(x, canvasState.width - r - pad));
+		y = Math.max(r + pad, Math.min(y, canvasState.height - r - pad));
+
+		return { id: e.id, x, y, r, title: e.title, distance: e.distanceKm, dispersionPx };
 	});
 }
 
@@ -259,20 +301,45 @@ function drawCanvas(){
 	// center (user)
 	ctx.save();
 	ctx.translate(canvasState.width/2, canvasState.height/2);
-	ctx.fillStyle = '#2b7a78';
+	ctx.fillStyle = '#1F7A8C';
 	ctx.beginPath(); ctx.arc(0,0,10,0,Math.PI*2); ctx.fill();
 	ctx.fillStyle = '#fff'; ctx.font = '12px Arial'; ctx.textAlign='center'; ctx.fillText('You', 0, 28);
 	ctx.restore();
 
 	// draw event points
 	canvasState.points.forEach(p => {
+		// apply offsets if present (legacy handling)
+		const x = p.x + (canvasState.offsetX || 0);
+		const y = p.y + (canvasState.offsetY || 0);
+		const isHighlighted = canvasState.highlightedId === p.id;
+		const r = isHighlighted ? p.r + 6 : p.r + 2;
+
 		ctx.beginPath();
-		ctx.fillStyle = canvasState.highlightedId === p.id ? '#ff7a59' : '#4b79a1';
-		ctx.arc(p.x, p.y, canvasState.highlightedId === p.id ? p.r+4 : p.r, 0, Math.PI*2);
+		ctx.fillStyle = isHighlighted ? '#ff7a59' : '#1F7A8C';
+		ctx.arc(x, y, r, 0, Math.PI*2);
 		ctx.fill();
-		// label
-		ctx.fillStyle = '#123'; ctx.font = '11px Arial'; ctx.textAlign = 'left';
-		ctx.fillText(p.title, p.x + p.r + 6, p.y + 4);
+
+		// draw highlight ring
+		if(isHighlighted){
+			ctx.beginPath();
+			ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,122,89,0.95)'; ctx.stroke();
+			// subtle glow
+			ctx.save(); ctx.shadowColor = 'rgba(255,122,89,0.12)'; ctx.shadowBlur = 12; ctx.restore();
+		}
+
+		// label - avoid overflowing the right edge
+		ctx.fillStyle = '#123'; ctx.font = '12px Arial';
+		const labelXDefault = x + r + 8;
+		const labelRightLimit = canvasState.width - 6;
+		const textWidth = ctx.measureText(p.title).width;
+		if(labelXDefault + textWidth > labelRightLimit){
+			// draw to the left of the point
+			ctx.textAlign = 'right';
+			ctx.fillText(p.title, x - r - 8, y + 4);
+		} else {
+			ctx.textAlign = 'left';
+			ctx.fillText(p.title, labelXDefault, y + 4);
+		}
 	});
 }
 
@@ -295,6 +362,12 @@ function highlightOnCanvas(id){
 	drawCanvas();
 }
 
+// Map highlight wrapper (no-op / forwards to canvas highlight when map isn't used)
+function highlightOnMap(id){
+	// if there's a real map implementation it can override this function
+	highlightOnCanvas(id);
+}
+
 // Canvas mouse interactions: tooltip and click
 function onCanvasMove(e){
 	const rect = canvas.getBoundingClientRect();
@@ -305,9 +378,21 @@ function onCanvasMove(e){
 		const dx = mx - p.x; const dy = my - p.y; if(Math.hypot(dx,dy) <= p.r + 6){ found = p; break; }
 	}
 	if(found){
-		tooltip.style.display = 'block'; tooltip.setAttribute('aria-hidden','false');
+		// set content and show so we can measure size
 		tooltip.textContent = `${found.title} — ${found.distance.toFixed(1)} km`;
-		tooltip.style.left = (found.x) + 'px'; tooltip.style.top = (found.y) + 'px';
+		tooltip.style.display = 'block'; tooltip.setAttribute('aria-hidden','false');
+		// measure tooltip (fallbacks in case sizes are 0)
+		const tw = tooltip.offsetWidth || 120;
+		const th = tooltip.offsetHeight || 28;
+		// clamp center x so tooltip (which is centered by transform) stays inside
+		const minCenterX = tw/2 + 6;
+		const maxCenterX = canvasState.width - tw/2 - 6;
+		const clampedX = Math.max(minCenterX, Math.min(found.x, maxCenterX));
+		// clamp top so tooltip doesn't go off the top/bottom
+		const minTop = th + 8; // a little space
+		const maxTop = canvasState.height - 8;
+		const clampedY = Math.max(minTop, Math.min(found.y, maxTop));
+		tooltip.style.left = clampedX + 'px'; tooltip.style.top = clampedY + 'px';
 		canvasState.highlightedId = found.id;
 		drawCanvas();
 	} else {
@@ -370,7 +455,22 @@ function tryGeolocation(){
 // Events
 locateBtn.addEventListener('click', () => tryGeolocation());
 mockLocBtn.addEventListener('click', () => { useSampleLocation(); });
-radiusInput.addEventListener('change', () => updateAll());
+radiusInput.addEventListener('change', () => {
+	if(radiusSlider) radiusSlider.value = radiusInput.value;
+	if(radiusValue) radiusValue.textContent = radiusInput.value + ' km';
+	updateAll();
+});
+
+if(radiusSlider){
+	radiusSlider.addEventListener('input', ()=>{
+		radiusValue.textContent = radiusSlider.value + ' km';
+		radiusInput.value = radiusSlider.value;
+		updateAll();
+	});
+	// initialize display
+	radiusSlider.value = radiusInput.value;
+	radiusValue.textContent = radiusSlider.value + ' km';
+}
 
 // Canvas interactions
 canvas.addEventListener('mousemove', onCanvasMove);
@@ -378,12 +478,25 @@ canvas.addEventListener('mouseleave', () => { tooltip.style.display='none'; canv
 canvas.addEventListener('click', onCanvasClick);
 window.addEventListener('resize', () => { computePoints(); drawCanvas(); });
 
+// handle fullscreen changes (some browsers do not emit a resize event when toggling fullscreen)
+function onFullscreenChange(){
+	// small timeout to allow layout to settle
+	setTimeout(()=>{ resizeCanvas(); computePoints(); drawCanvas(); }, 80);
+}
+document.addEventListener('fullscreenchange', onFullscreenChange);
+document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+document.addEventListener('mozfullscreenchange', onFullscreenChange);
+
 // Init: set a default size and sample location
 function init(){
-	// give the canvas a reasonable height
+	// ensure canvas sizing is correct before first draw
+	resizeCanvas();
+	// give the canvas a reasonable height fallback (kept for older browsers)
 	const wrap = canvas.parentElement; wrap.style.minHeight = '420px';
 	// try to use geolocation, but fallback to sample
 	tryGeolocation();
+	// schedule a compute/draw after layout settles
+	requestAnimationFrame(()=>{ computePoints(); drawCanvas(); });
 }
 
 init();
