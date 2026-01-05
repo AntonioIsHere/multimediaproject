@@ -1,9 +1,9 @@
 const events = [
-	{ id: 1, title: 'Handmade Crafts Fair', lat: 44.43365685862991, lon: 26.09807813986475, date: '2025-11-28', place: 'Calea Victoriei', type: 'fair'},
-	{ id: 2, title: 'Weekend Yoga Workshop', lat: 44.46766523647163, lon: 26.08531561488676, date: '2025-11-25', place: 'Park Herastrau', type: 'workshop' },
-	{ id: 3, title: 'Sabaton concert', lat: 44.412924779550536, lon: 26.09324593969963, date: '2025-12-05', place: 'Arenele Romane', type: 'festival' },
-	{ id: 4, title: 'Street photography event', lat: 44.43185839104518, lon: 26.101035073760517, date: '2025-11-30', place: 'Old town', type: 'meetup' },
-	{ id: 5, title: 'Local Food Tasting', lat: 44.450118843059066, lon: 26.13004233650032, date: '2025-12-01', place: 'Piata Obor', type: 'festival' }
+	{ id: 1, title: 'Handmade Crafts Fair', lat: 44.43365685862991, lon: 26.09807813986475, date: '2025-11-28', place: 'Calea Victoriei', type: 'fair', videoUrl: 'assets/Bucharest_Handmade_Crafts_Fair_Video.mp4'},
+	{ id: 2, title: 'Weekend Yoga Workshop', lat: 44.46766523647163, lon: 26.08531561488676, date: '2025-11-25', place: 'Park Herastrau', type: 'workshop', videoUrl: 'assets/Bucharest_Yoga_Workshop_Video_Generated.mp4' },
+	{ id: 3, title: 'Sabaton concert', lat: 44.412924779550536, lon: 26.09324593969963, date: '2025-12-05', place: 'Arenele Romane', type: 'festival', videoUrl: 'assets/sabatonevent.mp4' },
+	{ id: 4, title: 'Street photography event', lat: 44.43185839104518, lon: 26.101035073760517, date: '2025-11-30', place: 'Old town', type: 'meetup', videoUrl: 'assets/Bucharest_Street_Photography_Event_Video.mp4' },
+	{ id: 5, title: 'Local Food Tasting', lat: 44.450118843059066, lon: 26.13004233650032, date: '2025-12-01', place: 'Piata Obor', type: 'festival', videoUrl: 'assets/Bucharest_Food_Tasting_Video_Generated.mp4' }
 ];
 
 const locateBtn = document.getElementById('locateBtn');
@@ -51,6 +51,7 @@ function renderEventsList(items){
 							<div class="event-actions">
 								<button class="join-btn">Join</button>
 								<button class="audio-btn" data-id="${e.id}">Preview</button>
+								<button class="video-btn" data-id="${e.id}">Video Preview</button>
 							</div>`;
 
 		card.appendChild(thumb);
@@ -78,6 +79,16 @@ function renderEventsList(items){
 				const ev = items.find(it => it.id === id);
 				if(!ev) return;
 				await playEventAudio(ev, audioBtn);
+			});
+		}
+
+		const videoBtn = card.querySelector('.video-btn');
+		if(videoBtn){
+			videoBtn.addEventListener('click', () => {
+				const id = parseInt(videoBtn.dataset.id,10);
+				const ev = items.find(it => it.id === id);
+				if(!ev || !ev.videoUrl) return;
+				playEventVideo(ev);
 			});
 		}
 
@@ -156,28 +167,42 @@ function speakEvent(ev, buttonEl){
 	window.speechSynthesis.speak(msg);
 }
 
-function drawViz(){
-	if(!vizCtx || !vizCanvas) return;
-	requestAnimationFrame(drawViz);
-	if(!analyser) return;
-	const w = vizCanvas.width = vizCanvas.clientWidth * (window.devicePixelRatio || 1);
-	const h = vizCanvas.height = vizCanvas.clientHeight * (window.devicePixelRatio || 1);
-	const data = new Uint8Array(analyser.frequencyBinCount);
-	analyser.getByteTimeDomainData(data);
-	vizCtx.clearRect(0,0,w,h);
-	vizCtx.lineWidth = 2 * (window.devicePixelRatio || 1);
-	vizCtx.strokeStyle = '#1F7A8C';
-	vizCtx.beginPath();
-	const sliceWidth = w / data.length;
-	let x = 0;
-	for(let i=0;i<data.length;i++){
-		const v = data[i]/128.0;
-		const y = v*h/2;
-		if(i===0) vizCtx.moveTo(x,y); else vizCtx.lineTo(x,y);
-		x += sliceWidth;
+function playEventVideo(ev){
+	const videoModal = document.getElementById('videoModal');
+	const eventVideo = document.getElementById('eventVideo');
+	if(!videoModal || !eventVideo) return;
+	eventVideo.src = ev.videoUrl;
+	videoModal.style.display = 'block';
+	eventVideo.play();
+}
+
+
+const videoModal = document.getElementById('videoModal');
+const closeBtn = document.querySelector('.close');
+if(closeBtn){
+	closeBtn.onclick = function() {
+		videoModal.style.display = 'none';
+		const eventVideo = document.getElementById('eventVideo');
+		if(eventVideo) {
+			eventVideo.pause();
+			eventVideo.currentTime = 0; 
+		}
 	}
-	vizCtx.stroke();
-} 
+}
+if(videoModal){
+	window.onclick = function(event) {
+		if (event.target == videoModal) {
+			videoModal.style.display = 'none';
+			const eventVideo = document.getElementById('eventVideo');
+			if(eventVideo) {
+				eventVideo.pause();
+				eventVideo.currentTime = 0;
+			}
+		}
+	}
+}
+
+
 
 let map = null;
 let eventMarkers = new Map();
