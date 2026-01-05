@@ -8,6 +8,7 @@ const events = [
 
 const locateBtn = document.getElementById('locateBtn');
 const mockLocBtn = document.getElementById('mockLocBtn');
+const heatmapBtn = document.getElementById('heatmapBtn');
 const radiusInput = document.getElementById('radius');
 const radiusSlider = document.getElementById('radiusSlider');
 const radiusValue = document.getElementById('radiusValue');
@@ -235,6 +236,9 @@ let map = null;
 let eventMarkers = new Map();
 let userMarker = null;
 let lastHighlightedMarker = null;
+let heatmapCanvas = null;
+let heatmapCtx = null;
+let heatmapVisible = false;
 
 const ctx = canvas ? canvas.getContext('2d') : null;
 let canvasState = { width:0, height:0, deviceRatio:1, scale:1, viewRadiusKm:50, points:[], highlightedId:null, baseScale:null, baseViewKm:null };
@@ -246,7 +250,22 @@ function initMap(){
 		map = L.map('map').setView([44.4268, 26.1025], 13);
 		L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
 		map.on('click', ()=>{ highlightOnMap(null); });
-		map.on('moveend', ()=>{ if(map) drawCanvas(); });
+		map.on('moveend', ()=>{ if(map) drawHeatmap(); });
+		map.on('zoomend', ()=>{ if(map) drawHeatmap(); });
+		map.on('resize', ()=>{ resizeHeatmapCanvas(); if(heatmapVisible) drawHeatmap(); });
+
+		// Add heatmap canvas overlay
+		heatmapCanvas = document.createElement('canvas');
+		heatmapCanvas.style.position = 'absolute';
+		heatmapCanvas.style.top = '0';
+		heatmapCanvas.style.left = '0';
+		heatmapCanvas.style.width = '100%';
+		heatmapCanvas.style.height = '100%';
+		heatmapCanvas.style.pointerEvents = 'none';
+		heatmapCanvas.style.zIndex = '1000';
+		map.getContainer().appendChild(heatmapCanvas);
+		heatmapCtx = heatmapCanvas.getContext('2d');
+		resizeHeatmapCanvas();
 	} catch(err){ console.error('Failed to initialize Leaflet map', err); }
 }
 
@@ -263,6 +282,7 @@ function updateMap(items){
 		});
 		eventMarkers.set(e.id, marker);
 	});
+	updateHeatmap();
 }
 
 function setUserMarker(lat, lon){
@@ -272,12 +292,49 @@ function setUserMarker(lat, lon){
 	map.setView([lat,lon], map.getZoom());
 }
 
-function highlightOnMap(id){
-	if(!map) return;
-	if(lastHighlightedMarker){ try{ lastHighlightedMarker.setIcon(new L.Icon.Default()); lastHighlightedMarker.closePopup(); }catch(e){} lastHighlightedMarker=null; }
-	if(id == null) return;
-	const m = eventMarkers.get(id);
-	if(m){ m.openPopup(); lastHighlightedMarker = m; }
+function resizeHeatmapCanvas(){
+	if(!heatmapCanvas || !map) return;
+	const dpr = window.devicePixelRatio || 1;
+	const size = map.getSize();
+	heatmapCanvas.width = size.x * dpr;
+	heatmapCanvas.height = size.y * dpr;
+	heatmapCanvas.style.width = size.x + 'px';
+	heatmapCanvas.style.height = size.y + 'px';
+	heatmapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function drawHeatmap(){
+	if(!heatmapCtx || !map || !heatmapVisible) return;
+	heatmapCtx.clearRect(0, 0, heatmapCanvas.width, heatmapCanvas.height);
+	const items = filterEvents();
+	const zoom = map.getZoom();
+	const radius = 35 + (zoom - 10) * 2; // larger base size
+	items.forEach(e => {
+		const point = map.latLngToContainerPoint([e.lat, e.lon]);
+		const gradient = heatmapCtx.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius);
+		gradient.addColorStop(0, 'rgba(23, 99, 111, 0.75)');
+		gradient.addColorStop(0.5, 'rgba(23, 99, 111, 0.2)');
+		gradient.addColorStop(1, 'rgba(23, 99, 111, 0)');
+		heatmapCtx.fillStyle = gradient;
+		heatmapCtx.beginPath();
+		heatmapCtx.arc(point.x, point.y, radius, 0, 2 * Math.PI);
+		heatmapCtx.fill();
+	});
+}
+
+function updateHeatmap(){
+	if(heatmapVisible){
+		drawHeatmap();
+	} else {
+		if(heatmapCtx) heatmapCtx.clearRect(0, 0, heatmapCanvas.width, heatmapCanvas.height);
+	}
+}
+
+function toggleHeatmap(){
+	heatmapVisible = !heatmapVisible;
+	heatmapBtn.textContent = heatmapVisible ? 'Hide Heatmap' : 'Show Heatmap';
+	heatmapBtn.classList.toggle('active', heatmapVisible);
+	updateHeatmap();
 }
 
 function resizeCanvas(){
@@ -482,6 +539,7 @@ function tryGeolocation(){
 
 locateBtn.addEventListener('click', () => tryGeolocation());
 mockLocBtn.addEventListener('click', () => { useSampleLocation(); });
+heatmapBtn.addEventListener('click', () => toggleHeatmap());
 radiusInput.addEventListener('change', () => {
 	if(radiusSlider) radiusSlider.value = radiusInput.value;
 	if(radiusValue) radiusValue.textContent = radiusInput.value + ' km';
@@ -521,4 +579,3 @@ function init(){
 }
 
 init();
-
