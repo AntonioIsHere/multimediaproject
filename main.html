@@ -5,6 +5,7 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<title>Local Events Explorer</title>
 		<link rel="stylesheet" href="style.css">
+		<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 	</head>
 	<body>
 		<header>
@@ -40,12 +41,12 @@
 			</aside>
 
 			<section class="canvas-wrap">
-				<canvas id="eventsCanvas"></canvas>
-				<div id="tooltip" class="tooltip" aria-hidden="true"></div>
+			<div id="map" aria-hidden="false" style="width:100%;height:100%;"></div>
 				</section>
 			</section>
 		</main>
 
+		<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 		<script src="script.js"></script>
 	</body>
 </html>

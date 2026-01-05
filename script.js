@@ -1,14 +1,11 @@
-// Sample events dataset (latitude, longitude near Bucharest as sample)
 const events = [
-	// moved slightly to spread points visually across S/E directions
-	{ id: 1, title: 'Handmade Crafts Fair', lat: 44.4375, lon: 26.1080, date: '2025-11-28', place: 'Old Town', type: 'fair', audioUrl: 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3' },
-	{ id: 2, title: 'Weekend Yoga Workshop', lat: 44.4230, lon: 26.1055, date: '2025-11-25', place: 'Park Herastrau', type: 'workshop' },
-	{ id: 3, title: 'Indie Music Festival', lat: 44.4180, lon: 26.1230, date: '2025-12-05', place: 'Open Air Stage', type: 'festival', audioUrl: '' },
-	{ id: 4, title: 'Photography Walk', lat: 44.4440, lon: 26.1150, date: '2025-11-30', place: 'Museum Quarter', type: 'meetup' },
-	{ id: 5, title: 'Local Food Tasting', lat: 44.4270, lon: 26.1350, date: '2025-12-01', place: 'City Market', type: 'festival' }
+	{ id: 1, title: 'Handmade Crafts Fair', lat: 44.43365685862991, lon: 26.09807813986475, date: '2025-11-28', place: 'Calea Victoriei', type: 'fair'},
+	{ id: 2, title: 'Weekend Yoga Workshop', lat: 44.46766523647163, lon: 26.08531561488676, date: '2025-11-25', place: 'Park Herastrau', type: 'workshop' },
+	{ id: 3, title: 'Sabaton concert', lat: 44.412924779550536, lon: 26.09324593969963, date: '2025-12-05', place: 'Arenele Romane', type: 'festival' },
+	{ id: 4, title: 'Street photography event', lat: 44.43185839104518, lon: 26.101035073760517, date: '2025-11-30', place: 'Museum Quarter', type: 'meetup' },
+	{ id: 5, title: 'Local Food Tasting', lat: 44.450118843059066, lon: 26.13004233650032, date: '2025-12-01', place: 'Piata Obor', type: 'festival' }
 ];
 
-// DOM refs
 const locateBtn = document.getElementById('locateBtn');
 const mockLocBtn = document.getElementById('mockLocBtn');
 const radiusInput = document.getElementById('radius');
@@ -18,12 +15,30 @@ const eventsList = document.getElementById('eventsList');
 const canvas = document.getElementById('eventsCanvas');
 const tooltip = document.getElementById('tooltip');
 
-let userLoc = null; // {lat, lon}
+let userLoc = null;
 let filtered = [];
 
-// Utility: haversine distance in km
+const mapImage = new Image();
+mapImage.src = 'assets/bucharestmap.jpg';
+let mapImageLoaded = false;
+mapImage.onload = () => { mapImageLoaded = true; requestAnimationFrame(drawCanvas); };
+
+const mapBounds = { minLat: 44.33, maxLat: 44.48, minLon: 26.02, maxLon: 26.22 };
+
+function latLonToCanvasXY(lat, lon){
+	const w = canvasState.width; const h = canvasState.height;
+	const u = (lon - mapBounds.minLon) / (mapBounds.maxLon - mapBounds.minLon);
+	const v = (mapBounds.maxLat - lat) / (mapBounds.maxLat - mapBounds.minLat);
+	const ix = u * w; const iy = v * h;
+	const cx = w/2; const cy = h/2;
+	const scaleFactor = canvasState.baseScale ? (canvasState.scale / canvasState.baseScale) : 1;
+	const x = cx + (ix - cx) * scaleFactor;
+	const y = cy + (iy - cy) * scaleFactor;
+	return { x, y };
+}
+
 function haversineDistance(lat1, lon1, lat2, lon2){
-	const R = 6371; // km
+	const R = 6371;
 	const toRad = d => d * Math.PI/180;
 	const dLat = toRad(lat2-lat1);
 	const dLon = toRad(lon2-lon1);
@@ -32,7 +47,6 @@ function haversineDistance(lat1, lon1, lat2, lon2){
 	return R*c;
 }
 
-// Render event cards
 function renderEventsList(items){
 	eventsList.innerHTML = '';
 	if(items.length === 0){
@@ -53,16 +67,15 @@ function renderEventsList(items){
 		const body = document.createElement('div');
 		body.className = 'event-body';
 		body.innerHTML = `<h3 class="event-title">${e.title}</h3>
-											<div class="event-meta">${e.place} • ${e.date} • ${e.distanceKm.toFixed(1)} km</div>
-											<div class="event-actions">
-												<button class="join-btn">Join</button>
-												<button class="audio-btn" data-id="${e.id}">Preview</button>
-											</div>`;
+							<div class="event-meta">${e.place} • ${e.date} • ${e.distanceKm.toFixed(1)} km</div>
+							<div class="event-actions">
+								<button class="join-btn">Join</button>
+								<button class="audio-btn" data-id="${e.id}">Preview</button>
+							</div>`;
 
 		card.appendChild(thumb);
 		card.appendChild(body);
 
-		// initialize join button based on persistent state on the original event object
 		const joinBtn = card.querySelector('.join-btn');
 		const origEvent = events.find(ev => ev.id === e.id);
 		const isJoined = origEvent && origEvent.joined;
@@ -72,7 +85,7 @@ function renderEventsList(items){
 
 		joinBtn.addEventListener('click', () => {
 			if(!origEvent) return;
-			origEvent.joined = !origEvent.joined; // toggle persistent state
+			origEvent.joined = !origEvent.joined;
 			joinBtn.textContent = origEvent.joined ? 'Joined' : 'Join';
 			joinBtn.classList.toggle('joined', origEvent.joined);
 			card.style.background = origEvent.joined ? '#f4fffc' : '';
@@ -81,7 +94,6 @@ function renderEventsList(items){
 		card.addEventListener('mouseenter', () => { highlightOnCanvas(e.id); if(typeof highlightOnMap === 'function') highlightOnMap(e.id); });
 		card.addEventListener('mouseleave', () => { highlightOnCanvas(null); if(typeof highlightOnMap === 'function') highlightOnMap(null); });
 
-		// audio preview
 		const audioBtn = card.querySelector('.audio-btn');
 		if(audioBtn){
 			audioBtn.addEventListener('click', async () => {
@@ -96,7 +108,6 @@ function renderEventsList(items){
 	});
 }
 
-// --- Audio API setup ---
 let audioCtx = null;
 let masterGain = null;
 let analyser = null;
@@ -113,7 +124,6 @@ function ensureAudioContext(){
 	if(audioCtx) return;
 	audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 	masterGain = audioCtx.createGain();
-	// use volume control if present, otherwise default to 0.9
 	masterGain.gain.value = parseFloat((volumeControl && volumeControl.value) || 0.9);
 	analyser = audioCtx.createAnalyser();
 	analyser.fftSize = 256;
@@ -128,10 +138,8 @@ function stopCurrentAudio(){
 		currentSource.disconnect();
 		currentSource = null;
 	}
-	// stop speech synthesis too
 	if(window.speechSynthesis){ window.speechSynthesis.cancel(); }
 	currentEventId = null;
-	// update UI
 	document.querySelectorAll('.audio-btn.playing').forEach(b=>{ b.classList.remove('playing'); b.textContent = 'Preview'; });
 }
 
@@ -152,10 +160,8 @@ async function loadAudioBuffer(url){
 }
 
 async function playEventAudio(ev, buttonEl){
-	// stop previous
 	if(currentEventId === ev.id){ stopCurrentAudio(); return; }
 	stopCurrentAudio();
-	// ensure context on user gesture
 	ensureAudioContext();
 	if(ev.audioUrl){
 		const buf = await loadAudioBuffer(ev.audioUrl);
@@ -166,18 +172,15 @@ async function playEventAudio(ev, buttonEl){
 			src.start();
 			currentSource = src;
 			currentEventId = ev.id;
-			// ui
 			document.querySelectorAll('.audio-btn.playing').forEach(b=>{ b.classList.remove('playing'); b.textContent = 'Preview'; });
 			buttonEl.classList.add('playing'); buttonEl.textContent='Stop';
 			src.onended = () => { stopCurrentAudio(); };
 		} else {
-			// fallback to speech
 			speakEvent(ev, buttonEl);
 		}
 	} else {
-		// no file — use SpeechSynthesis as fallback (read title and place)
 		speakEvent(ev, buttonEl);
-	}
+	} 
 }
 
 function speakEvent(ev, buttonEl){
@@ -190,7 +193,6 @@ function speakEvent(ev, buttonEl){
 	window.speechSynthesis.speak(msg);
 }
 
-// viz
 function drawViz(){
 	if(!vizCtx || !vizCanvas) return;
 	requestAnimationFrame(drawViz);
@@ -222,7 +224,6 @@ if(volumeControl){
 
 if(globalPlay){
 	globalPlay.addEventListener('click', ()=>{
-		// if there is a highlighted event, play it; otherwise play first filtered
 		const toPlay = filtered[0] || null;
 		if(!toPlay) return alert('No event selected to play.');
 		const btn = eventsList.querySelector(`.audio-btn[data-id='${toPlay.id}']`);
@@ -230,11 +231,57 @@ if(globalPlay){
 	});
 }
 
-// Canvas rendering
-const ctx = canvas.getContext('2d');
-let canvasState = { width:0, height:0, deviceRatio:1, scale:1, viewRadiusKm:50, points:[], highlightedId:null };
+let map = null;
+let eventMarkers = new Map();
+let userMarker = null;
+let lastHighlightedMarker = null;
+
+const ctx = canvas ? canvas.getContext('2d') : null;
+let canvasState = { width:0, height:0, deviceRatio:1, scale:1, viewRadiusKm:50, points:[], highlightedId:null, baseScale:null, baseViewKm:null };
+const hasCanvas = () => !!canvas && !!ctx;
+
+function initMap(){
+	if(typeof L === 'undefined'){ console.warn('Leaflet (L) is not available. Is the Leaflet script loaded?'); return; }
+	try{
+		map = L.map('map').setView([44.4268, 26.1025], 13);
+		L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+		map.on('click', ()=>{ highlightOnMap(null); });
+		map.on('moveend', ()=>{ if(map) drawCanvas(); });
+	} catch(err){ console.error('Failed to initialize Leaflet map', err); }
+}
+
+function updateMap(items){
+	if(!map) return;
+	eventMarkers.forEach(m=>{ map.removeLayer(m); });
+	eventMarkers.clear();
+	items.forEach(e => {
+		const marker = L.marker([e.lat, e.lon]).addTo(map).bindPopup(e.title);
+		marker.on('click', ()=>{
+			const card = eventsList.querySelector(`[data-id='${e.id}']`);
+			if(card){ card.scrollIntoView({behavior:'smooth',block:'center'}); card.style.transition='background 0.2s'; card.style.background='#fff7e6'; setTimeout(()=>card.style.background='',900); }
+			highlightOnMap(e.id);
+		});
+		eventMarkers.set(e.id, marker);
+	});
+}
+
+function setUserMarker(lat, lon){
+	if(!map) return;
+	if(userMarker){ userMarker.setLatLng([lat,lon]); }
+	else{ userMarker = L.marker([lat,lon]).addTo(map).bindPopup('You'); }
+	map.setView([lat,lon], map.getZoom());
+}
+
+function highlightOnMap(id){
+	if(!map) return;
+	if(lastHighlightedMarker){ try{ lastHighlightedMarker.setIcon(new L.Icon.Default()); lastHighlightedMarker.closePopup(); }catch(e){} lastHighlightedMarker=null; }
+	if(id == null) return;
+	const m = eventMarkers.get(id);
+	if(m){ m.openPopup(); lastHighlightedMarker = m; }
+}
 
 function resizeCanvas(){
+	if(!hasCanvas()) return;
 	const rect = canvas.getBoundingClientRect();
 	const dpr = window.devicePixelRatio || 1;
 	canvas.width = Math.floor(rect.width * dpr);
@@ -248,42 +295,35 @@ function resizeCanvas(){
 }
 
 function computePoints(){
+	if(!hasCanvas()) return;
 	if(!userLoc) return;
-	// ensure we have valid canvas dimensions (can be zero during layout changes)
 	if(canvasState.width <= 0 || canvasState.height <= 0){
 		resizeCanvas();
-		if(canvasState.width <= 0 || canvasState.height <= 0) return; // give up until next resize
+		if(canvasState.width <= 0 || canvasState.height <= 0) return;
 	}
 	const centerLat = userLoc.lat; const centerLon = userLoc.lon;
 	const meanLat = centerLat * Math.PI/180;
-	const kmPerDegLat = 111.32; // approx
+	const kmPerDegLat = 111.32;
 	const kmPerDegLon = 40075 * Math.cos(meanLat) / 360;
 
 	const maxDist = parseFloat(radiusInput.value) || 50;
 	canvasState.viewRadiusKm = maxDist;
 
-	// map distances in km into canvas radius (min dimension/2 - padding)
 	const radiusPx = Math.min(canvasState.width, canvasState.height)/2 - 40;
 	canvasState.scale = radiusPx / maxDist;
 
 	canvasState.points = filtered.map(e => {
-		const dxKm = (e.lon - centerLon) * kmPerDegLon;
-		const dyKm = (e.lat - centerLat) * kmPerDegLat; // north positive
-		let x = canvasState.width/2 + dxKm * canvasState.scale;
-		let y = canvasState.height/2 - dyKm * canvasState.scale;
+		const pos = latLonToCanvasXY(e.lat, e.lon);
+		let x = pos.x;
+		let y = pos.y;
 
-		// Visual dispersion: apply a small, deterministic pixel offset to
-		// reduce overlap for very close events without changing distance data.
-		// Dispersion is larger for near events and decays with distance.
 		const dist = e.distanceKm;
-		const maxDispersion = 18; // px max visual spread
+		const maxDispersion = 18;
 		const dispersionPx = Math.min(maxDispersion, maxDispersion * Math.exp(-dist/6));
-		const angle = ((e.id * 137.508) % 360) * Math.PI / 180; // deterministic angle per id
+		const angle = ((e.id * 137.508) % 360) * Math.PI / 180;
 		x += Math.cos(angle) * dispersionPx;
 		y += Math.sin(angle) * dispersionPx;
 
-		// compute visual radius and clamp point within canvas bounds so
-		// it doesn't get placed outside (which caused overlapping UI)
 		const r = 8 + Math.max(0, 10 - e.distanceKm/5);
 		const pad = 6;
 		x = Math.max(r + pad, Math.min(x, canvasState.width - r - pad));
@@ -294,21 +334,28 @@ function computePoints(){
 }
 
 function drawCanvas(){
+	if(!hasCanvas()) return;
 	resizeCanvas();
 	ctx.clearRect(0,0,canvasState.width,canvasState.height);
-	// background grid
-	drawGrid();
-	// center (user)
+	if(mapImageLoaded){
+		const cx = canvasState.width/2, cy = canvasState.height/2;
+		ctx.save();
+		const scaleFactor = canvasState.baseScale ? (canvasState.scale / canvasState.baseScale) : 1;
+		ctx.translate(cx, cy);
+		ctx.scale(scaleFactor, scaleFactor);
+		ctx.drawImage(mapImage, -cx, -cy, canvasState.width, canvasState.height);
+		ctx.restore();
+	}
+	const userPos = userLoc ? latLonToCanvasXY(userLoc.lat, userLoc.lon) : { x: canvasState.width/2, y: canvasState.height/2 };
+	drawGrid(userPos.x, userPos.y);
 	ctx.save();
-	ctx.translate(canvasState.width/2, canvasState.height/2);
+	ctx.translate(userPos.x, userPos.y);
 	ctx.fillStyle = '#1F7A8C';
 	ctx.beginPath(); ctx.arc(0,0,10,0,Math.PI*2); ctx.fill();
 	ctx.fillStyle = '#fff'; ctx.font = '12px Arial'; ctx.textAlign='center'; ctx.fillText('You', 0, 28);
 	ctx.restore();
 
-	// draw event points
 	canvasState.points.forEach(p => {
-		// apply offsets if present (legacy handling)
 		const x = p.x + (canvasState.offsetX || 0);
 		const y = p.y + (canvasState.offsetY || 0);
 		const isHighlighted = canvasState.highlightedId === p.id;
@@ -319,21 +366,17 @@ function drawCanvas(){
 		ctx.arc(x, y, r, 0, Math.PI*2);
 		ctx.fill();
 
-		// draw highlight ring
 		if(isHighlighted){
 			ctx.beginPath();
 			ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,122,89,0.95)'; ctx.stroke();
-			// subtle glow
 			ctx.save(); ctx.shadowColor = 'rgba(255,122,89,0.12)'; ctx.shadowBlur = 12; ctx.restore();
 		}
 
-		// label - avoid overflowing the right edge
 		ctx.fillStyle = '#123'; ctx.font = '12px Arial';
 		const labelXDefault = x + r + 8;
 		const labelRightLimit = canvasState.width - 6;
 		const textWidth = ctx.measureText(p.title).width;
 		if(labelXDefault + textWidth > labelRightLimit){
-			// draw to the left of the point
 			ctx.textAlign = 'right';
 			ctx.fillText(p.title, x - r - 8, y + 4);
 		} else {
@@ -343,11 +386,9 @@ function drawCanvas(){
 	});
 }
 
-function drawGrid(){
-	const cx = canvasState.width/2; const cy = canvasState.height/2;
+function drawGrid(cx = canvasState.width/2, cy = canvasState.height/2){
 	ctx.save();
 	ctx.strokeStyle = 'rgba(0,0,0,0.05)'; ctx.lineWidth = 1;
-	// concentric circles every 10km
 	const stepKm = Math.max(5, Math.ceil(canvasState.viewRadiusKm/5));
 	for(let km = stepKm; km <= canvasState.viewRadiusKm; km += stepKm){
 		const r = km * canvasState.scale;
@@ -356,19 +397,13 @@ function drawGrid(){
 	ctx.restore();
 }
 
-// Highlight from card or canvas
 function highlightOnCanvas(id){
 	canvasState.highlightedId = id;
 	drawCanvas();
 }
 
-// Map highlight wrapper (no-op / forwards to canvas highlight when map isn't used)
-function highlightOnMap(id){
-	// if there's a real map implementation it can override this function
-	highlightOnCanvas(id);
-}
 
-// Canvas mouse interactions: tooltip and click
+
 function onCanvasMove(e){
 	const rect = canvas.getBoundingClientRect();
 	const mx = (e.clientX - rect.left);
@@ -378,18 +413,14 @@ function onCanvasMove(e){
 		const dx = mx - p.x; const dy = my - p.y; if(Math.hypot(dx,dy) <= p.r + 6){ found = p; break; }
 	}
 	if(found){
-		// set content and show so we can measure size
-		tooltip.textContent = `${found.title} — ${found.distance.toFixed(1)} km`;
+		tooltip.textContent = `${found.title} — ${found.distance.toFixed(1)} km`; 
 		tooltip.style.display = 'block'; tooltip.setAttribute('aria-hidden','false');
-		// measure tooltip (fallbacks in case sizes are 0)
 		const tw = tooltip.offsetWidth || 120;
 		const th = tooltip.offsetHeight || 28;
-		// clamp center x so tooltip (which is centered by transform) stays inside
 		const minCenterX = tw/2 + 6;
 		const maxCenterX = canvasState.width - tw/2 - 6;
 		const clampedX = Math.max(minCenterX, Math.min(found.x, maxCenterX));
-		// clamp top so tooltip doesn't go off the top/bottom
-		const minTop = th + 8; // a little space
+		const minTop = th + 8; 
 		const maxTop = canvasState.height - 8;
 		const clampedY = Math.max(minTop, Math.min(found.y, maxTop));
 		tooltip.style.left = clampedX + 'px'; tooltip.style.top = clampedY + 'px';
@@ -407,37 +438,33 @@ function onCanvasClick(e){
 	const my = (e.clientY - rect.top);
 	for(const p of canvasState.points){
 		const dx = mx - p.x; const dy = my - p.y; if(Math.hypot(dx,dy) <= p.r + 6){
-			// scroll to card
 			const card = eventsList.querySelector(`[data-id='${p.id}']`);
 			if(card){ card.scrollIntoView({behavior:'smooth',block:'center'}); card.style.transition='background 0.2s'; card.style.background='#fff7e6'; setTimeout(()=>card.style.background='',900); }
 			break;
 		}}
 }
 
-// Filter events by radius and compute distances
-function filterEvents(){
-	if(!userLoc) return [];
+function filterEvents(){ 
 	const maxDist = parseFloat(radiusInput.value) || 50;
-	const res = events.map(e => ({...e, distanceKm: haversineDistance(userLoc.lat, userLoc.lon, e.lat, e.lon)}))
-								.filter(e => e.distanceKm <= maxDist)
-								.sort((a,b)=>a.distanceKm - b.distanceKm);
+	const center = userLoc ? userLoc : { lat:44.4268, lon:26.1025 };
+	const res = events.map(e => ({...e, distanceKm: haversineDistance(center.lat, center.lon, e.lat, e.lon)}))
+					.filter(e => !userLoc || e.distanceKm <= maxDist)
 	filtered = res;
 	return res;
 }
 
-// Main flow
 function updateAll(){
 	if(!userLoc) return;
 	const items = filterEvents();
 	renderEventsList(items);
+	if(map) updateMap(items);
 	computePoints();
 	drawCanvas();
 }
 
-// Location helpers
 function useSampleLocation(){
-	// sample: Bucharest center
 	userLoc = { lat:44.4268, lon:26.1025 };
+	if(map) setUserMarker(userLoc.lat, userLoc.lon);
 	updateAll();
 }
 
@@ -445,6 +472,7 @@ function tryGeolocation(){
 	if(!navigator.geolocation){ alert('Geolocation not supported in this browser.'); useSampleLocation(); return; }
 	navigator.geolocation.getCurrentPosition(pos => {
 		userLoc = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+		if(map) setUserMarker(userLoc.lat, userLoc.lon);
 		updateAll();
 	}, err => {
 		console.warn('Geolocation failed, using sample location.', err);
@@ -452,7 +480,6 @@ function tryGeolocation(){
 	}, { enableHighAccuracy: false, timeout: 8000 });
 }
 
-// Events
 locateBtn.addEventListener('click', () => tryGeolocation());
 mockLocBtn.addEventListener('click', () => { useSampleLocation(); });
 radiusInput.addEventListener('change', () => {
@@ -467,36 +494,30 @@ if(radiusSlider){
 		radiusInput.value = radiusSlider.value;
 		updateAll();
 	});
-	// initialize display
 	radiusSlider.value = radiusInput.value;
 	radiusValue.textContent = radiusSlider.value + ' km';
 }
 
-// Canvas interactions
-canvas.addEventListener('mousemove', onCanvasMove);
-canvas.addEventListener('mouseleave', () => { tooltip.style.display='none'; canvasState.highlightedId=null; drawCanvas(); });
-canvas.addEventListener('click', onCanvasClick);
+if(hasCanvas()){
+	canvas.addEventListener('mousemove', onCanvasMove);
+	canvas.addEventListener('mouseleave', () => { tooltip.style.display='none'; canvasState.highlightedId=null; drawCanvas(); });
+	canvas.addEventListener('click', onCanvasClick);
+}
 window.addEventListener('resize', () => { computePoints(); drawCanvas(); });
 
-// handle fullscreen changes (some browsers do not emit a resize event when toggling fullscreen)
 function onFullscreenChange(){
-	// small timeout to allow layout to settle
 	setTimeout(()=>{ resizeCanvas(); computePoints(); drawCanvas(); }, 80);
 }
 document.addEventListener('fullscreenchange', onFullscreenChange);
 document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 document.addEventListener('mozfullscreenchange', onFullscreenChange);
 
-// Init: set a default size and sample location
 function init(){
-	// ensure canvas sizing is correct before first draw
 	resizeCanvas();
-	// give the canvas a reasonable height fallback (kept for older browsers)
-	const wrap = canvas.parentElement; wrap.style.minHeight = '420px';
-	// try to use geolocation, but fallback to sample
+	const wrap = canvas ? canvas.parentElement : document.getElementById('map').parentElement; wrap.style.minHeight = '420px';
+	initMap();
 	tryGeolocation();
-	// schedule a compute/draw after layout settles
-	requestAnimationFrame(()=>{ computePoints(); drawCanvas(); });
+	requestAnimationFrame(()=>{ computePoints(); if(!canvasState.baseScale){ canvasState.baseViewKm = canvasState.viewRadiusKm; canvasState.baseScale = canvasState.scale; } if(map) updateMap(filterEvents()); drawCanvas(); });
 }
 
 init();
